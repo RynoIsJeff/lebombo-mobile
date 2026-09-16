@@ -435,12 +435,15 @@ function JobForm() {
             </div>
           </Section>
 
-          <Section title="Notes" hint="Anything the office should know. Optional.">
+          <Section
+            title="Notes"
+            hint="Anything worth recording about the job. Prints on the job card the customer gets, so write it for them as well as the office."
+          >
             <textarea
               className="field-textarea min-h-[90px] resize-y"
               value={card.notes}
               onChange={(e) => update({ notes: e.target.value })}
-              placeholder="Waiting on a part, returning Thursday…"
+              placeholder="Waiting on a part, returning Thursday. Fan bearings worn — will need replacing soon."
             />
           </Section>
 
