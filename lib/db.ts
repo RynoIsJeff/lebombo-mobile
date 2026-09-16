@@ -102,9 +102,17 @@ const DEFAULT_SETTINGS: Settings = {
 
 export async function getSettings(): Promise<Settings> {
   const stored = await tx<Settings | undefined>(SETTINGS, "readonly", (s) => s.get("settings"))
-  // Spread over the defaults so a field added in a later release is present on
-  // a phone that was set up before it existed.
-  return { ...DEFAULT_SETTINGS, ...(stored ?? {}) }
+  return {
+    // Spread over the defaults so a field added in a later release is present
+    // on a phone that was set up before it existed.
+    ...DEFAULT_SETTINGS,
+    ...(stored ?? {}),
+    // The deployed origin always wins over the one saved at pairing. Without
+    // this, the platform's URL is frozen into each phone the first time it
+    // syncs, and moving the platform to a custom domain would strand every
+    // phone already in the field with no way to fix it but a reinstall.
+    apiBase: DEFAULT_SETTINGS.apiBase || stored?.apiBase || "",
+  }
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
