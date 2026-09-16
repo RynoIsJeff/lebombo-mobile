@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "field-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3100
+    },
+    {
+      "name": "platform",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "../lebombo", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}
