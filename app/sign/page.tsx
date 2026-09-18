@@ -142,7 +142,7 @@ function SignSheet() {
         </header>
       )}
 
-      <main className="flex-1 px-4 py-5 pb-44">
+      <main className="flex-1 px-4 py-5 pb-56">
         {/* The job card itself, laid out like the printed one. */}
         <div className="card overflow-hidden">
           <div className="px-5 pt-5 pb-4 border-b-2 border-sun-yellow">
