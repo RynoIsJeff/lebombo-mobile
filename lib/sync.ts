@@ -1,9 +1,17 @@
-import { allJobCards, getSettings, putJobCardRaw, saveSettings } from "./db"
+import {
+  allJobCards,
+  deleteJobCard,
+  getSettings,
+  putJobCardRaw,
+  saveSettings,
+} from "./db"
 import type { CachedClient, JobCard, Settings } from "./types"
 
 export interface SyncResult {
   sent: number
   failed: number
+  /** Delivered cards the office has since deleted, removed from this phone. */
+  dropped?: number
   /** Not an error the technician did anything about — there was just no signal. */
   offline: boolean
   error?: string
@@ -40,7 +48,11 @@ function payload(card: JobCard) {
     items: card.items.map((i) => i.trim()).filter(Boolean),
     materials: card.materials
       .filter((m) => m.description.trim())
-      .map((m) => ({ description: m.description.trim(), quantity: m.quantity || 1 })),
+      .map((m) => ({
+        description: m.description.trim(),
+        quantity: m.quantity || 1,
+        unitCost: typeof m.unitCost === "number" && m.unitCost >= 0 ? m.unitCost : null,
+      })),
   }
 }
 
@@ -188,10 +200,55 @@ export async function syncNow(): Promise<SyncResult> {
     }
   }
 
+  const dropped = await reconcileDeletions(settings)
+
   await refreshClients().catch(() => {})
   await saveSettings({ lastSyncAt: new Date().toISOString() })
 
-  return { sent, failed, offline: false }
+  return { sent, failed, dropped, offline: false }
+}
+
+/**
+ * Ask the office which of the cards this phone has already delivered still
+ * exist, and drop the ones that do not.
+ *
+ * Without this the phone keeps showing a card as "Sent" forever, even after the
+ * office has deleted it — the technician would be looking at a job the business
+ * no longer has any record of.
+ *
+ * Only delivered cards are ever offered up. A draft, or anything still waiting
+ * to send, has never left the phone, so the office cannot have an opinion on it
+ * and it is never at risk here.
+ */
+async function reconcileDeletions(settings: Settings): Promise<number> {
+  const delivered = (await allJobCards()).filter((c) => c.status === "synced")
+  if (delivered.length === 0) return 0
+
+  try {
+    const response = await fetch(`${settings.apiBase}/api/mobile/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${settings.token}`,
+      },
+      body: JSON.stringify({
+        jobCards: [],
+        syncedIds: delivered.slice(0, 1000).map((c) => c.localId),
+      }),
+    })
+    if (!response.ok) return 0
+
+    const data = (await response.json()) as { removed?: string[] }
+    const removed = Array.isArray(data.removed) ? data.removed : []
+    for (const localId of removed) {
+      await deleteJobCard(localId)
+    }
+    return removed.length
+  } catch {
+    // Reconciling is housekeeping. Failing it must never fail a sync that has
+    // just successfully delivered a technician's work.
+    return 0
+  }
 }
 
 /** Pull the store list down so the picker keeps working out of signal. */

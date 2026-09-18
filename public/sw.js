@@ -7,14 +7,14 @@
  * about whether work reached the office.
  */
 
-const VERSION = "v1"
+const VERSION = "v2"
 const SHELL_CACHE = `lebombo-shell-${VERSION}`
 const ASSET_CACHE = `lebombo-assets-${VERSION}`
 
 /* Every route the app has. Job cards are edited at /job?id=… rather than a
  * dynamic path, so this short list really is the whole app — a technician can
  * open a card they have never opened before while out of signal. */
-const SHELL_ROUTES = ["/", "/setup", "/job", "/settings"]
+const SHELL_ROUTES = ["/", "/setup", "/job", "/sign", "/settings"]
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

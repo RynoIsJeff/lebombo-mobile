@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   CloudOff,
   Clock,
+  PenLine,
 } from "lucide-react"
 import {
   deleteJobCard,
@@ -17,9 +18,8 @@ import {
   getSettings,
   putJobCard,
 } from "@/lib/db"
-import { totalHours, visitHours, todayISO } from "@/lib/hours"
+import { totalHours, visitHours, todayISO, formatRand } from "@/lib/hours"
 import { emptyJobCard, type CachedClient, type JobCard } from "@/lib/types"
-import { SignaturePad } from "@/components/signature-pad"
 import { StorePicker } from "@/components/store-picker"
 import { useSync } from "../app-chrome"
 
@@ -47,7 +47,7 @@ function JobForm() {
   const router = useRouter()
   const params = useSearchParams()
   const localId = params.get("id")
-  const { online, runSync, bump } = useSync()
+  const { online, bump } = useSync()
 
   const [card, setCard] = useState<JobCard | null>(null)
   const [clients, setClients] = useState<CachedClient[]>([])
@@ -119,7 +119,14 @@ function JobForm() {
     }
   }
 
-  const complete = async () => {
+  /**
+   * Finish the card and hand the phone to whoever is signing it off.
+   *
+   * Nothing is sent yet. The card is put into "signing" and the technician is
+   * taken to the finished job card as the manager will see it — no input
+   * fields, nothing of ours to fiddle with, just the work and a place to sign.
+   */
+  const finish = async () => {
     // Only what the office genuinely cannot work without.
     if (!card.storeName.trim()) {
       setError("Choose the store first.")
@@ -129,10 +136,6 @@ function JobForm() {
       setError("Write down what you did on this job.")
       return
     }
-    if (!card.managerName.trim() || !card.managerSignature) {
-      setError("The store manager needs to sign the job off.")
-      return
-    }
 
     setError(null)
     setSaving(true)
@@ -140,15 +143,14 @@ function JobForm() {
       await putJobCard({
         ...card,
         items: filledItems,
-        status: "queued",
+        materials: card.materials.filter((m) => m.description.trim()),
+        status: "signing",
         capturedAt: card.capturedAt ?? new Date().toISOString(),
         syncError: null,
       })
       dirty.current = false
       bump()
-      // Straight out the door if there is signal; otherwise it waits its turn.
-      if (online) runSync({ silent: true })
-      router.push("/")
+      router.push(`/sign?id=${card.localId}`)
     } finally {
       setSaving(false)
     }
@@ -382,50 +384,93 @@ function JobForm() {
             </div>
           </Section>
 
-          <Section title="Material / spares" hint="Parts you fitted. The office puts the prices on.">
-            <div className="space-y-2.5">
+          <Section
+            title="Material / spares"
+            hint="Parts you fitted, and what each one cost you. The office adds the mark-up."
+          >
+            <div className="space-y-3">
               {card.materials.map((material, index) => (
-                <div key={index} className="flex items-start gap-2">
-                  <input
-                    className="field-input flex-1"
-                    value={material.description}
-                    onChange={(e) => {
-                      const materials = [...card.materials]
-                      materials[index] = { ...material, description: e.target.value }
-                      update({ materials })
-                    }}
-                    placeholder="Contactor 25A"
-                  />
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="any"
-                    className="field-input w-20 shrink-0 text-center"
-                    value={material.quantity}
-                    onChange={(e) => {
-                      const materials = [...card.materials]
-                      materials[index] = { ...material, quantity: Number(e.target.value) }
-                      update({ materials })
-                    }}
-                    aria-label="Quantity"
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      update({ materials: card.materials.filter((_, i) => i !== index) })
-                    }
-                    className="h-12 w-11 shrink-0 rounded-xl flex items-center justify-center text-steel-grey active:bg-[#FDECEA] active:text-[#A93226]"
-                    aria-label={`Remove material ${index + 1}`}
-                  >
-                    <Trash2 className="h-[16px] w-[16px]" />
-                  </button>
+                <div key={index} className="card p-3">
+                  <div className="flex items-start gap-2">
+                    <input
+                      className="field-input flex-1"
+                      value={material.description}
+                      onChange={(e) => {
+                        const materials = [...card.materials]
+                        materials[index] = { ...material, description: e.target.value }
+                        update({ materials })
+                      }}
+                      placeholder="Contactor 25A"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        update({ materials: card.materials.filter((_, i) => i !== index) })
+                      }
+                      className="h-12 w-11 shrink-0 rounded-xl flex items-center justify-center text-steel-grey active:bg-[#FDECEA] active:text-[#A93226]"
+                      aria-label={`Remove material ${index + 1}`}
+                    >
+                      <Trash2 className="h-[16px] w-[16px]" />
+                    </button>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[12px] text-steel-grey mb-1">How many</label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        className="field-input text-center"
+                        value={material.quantity}
+                        onChange={(e) => {
+                          const materials = [...card.materials]
+                          materials[index] = { ...material, quantity: Number(e.target.value) }
+                          update({ materials })
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[12px] text-steel-grey mb-1">
+                        Cost each (R)
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        className="field-input text-center"
+                        // Empty means "no figure", which is different from free.
+                        value={material.unitCost ?? ""}
+                        onChange={(e) => {
+                          const raw = e.target.value.trim()
+                          const materials = [...card.materials]
+                          materials[index] = {
+                            ...material,
+                            unitCost: raw === "" ? null : Number(raw),
+                          }
+                          update({ materials })
+                        }}
+                        placeholder="—"
+                      />
+                    </div>
+                  </div>
+                  {material.unitCost !== null && material.quantity > 0 && (
+                    <p className="mt-2 text-right text-[12.5px] font-semibold text-charcoal">
+                      {formatRand(material.unitCost * material.quantity)}
+                    </p>
+                  )}
                 </div>
               ))}
               <button
                 type="button"
                 onClick={() =>
-                  update({ materials: [...card.materials, { description: "", quantity: 1 }] })
+                  update({
+                    materials: [
+                      ...card.materials,
+                      { description: "", quantity: 1, unitCost: null },
+                    ],
+                  })
                 }
                 className="btn-secondary h-12"
               >
@@ -447,29 +492,6 @@ function JobForm() {
             />
           </Section>
 
-          <Section title="Sign off" hint="The store manager or department head signs here.">
-            <div className="space-y-4">
-              <div>
-                <label className="field-label" htmlFor="manager">
-                  Their name
-                </label>
-                <input
-                  id="manager"
-                  className="field-input"
-                  value={card.managerName}
-                  onChange={(e) => update({ managerName: e.target.value })}
-                  placeholder="Who signed the job off"
-                  autoComplete="off"
-                  enterKeyHint="done"
-                />
-              </div>
-              <SignaturePad
-                label="Their signature"
-                value={card.managerSignature}
-                onChange={(managerSignature) => update({ managerSignature })}
-              />
-            </div>
-          </Section>
         </fieldset>
       </main>
 
@@ -483,9 +505,9 @@ function JobForm() {
               {error}
             </div>
           )}
-          <button onClick={complete} disabled={saving} className="btn-primary">
-            <Check className="h-5 w-5" strokeWidth={2.5} />
-            {online ? "Finish and send" : "Finish — send when there is signal"}
+          <button onClick={finish} disabled={saving} className="btn-primary">
+            <PenLine className="h-5 w-5" strokeWidth={2.4} />
+            Finish and get signature
           </button>
           <button onClick={saveDraft} disabled={saving} className="btn-secondary">
             {!online && <CloudOff className="h-4 w-4" />}

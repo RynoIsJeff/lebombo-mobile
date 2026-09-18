@@ -10,6 +10,8 @@ export interface Visit {
 export interface Material {
   description: string
   quantity: number
+  /** What the part cost, per unit. Null when the technician has no figure. */
+  unitCost: number | null
 }
 
 /**
@@ -17,13 +19,21 @@ export interface Material {
  *
  * `draft`   — still being worked on. Lives on this phone only, and has no
  *             number: a job that is not finished is not a job card yet.
+ * `signing` — finished by the technician and shown to the store manager for
+ *             sign-off. Still local: nothing is sent until it is signed.
  * `queued`  — finished and signed off, waiting for signal.
  * `syncing` — currently being sent.
  * `synced`  — accepted by the platform, which assigned `jobCardNumber`.
  * `failed`  — the platform rejected it. Stays on the phone with the reason so
  *             the technician can fix it rather than losing the work.
  */
-export type JobCardStatus = "draft" | "queued" | "syncing" | "synced" | "failed"
+export type JobCardStatus =
+  | "draft"
+  | "signing"
+  | "queued"
+  | "syncing"
+  | "synced"
+  | "failed"
 
 export interface JobCard {
   /** Minted here, before the card has ever seen the network. Keeps sync idempotent. */

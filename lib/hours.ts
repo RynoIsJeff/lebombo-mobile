@@ -42,3 +42,12 @@ export function todayISO(): string {
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
   return local.toISOString().slice(0, 10)
 }
+
+/** Rands, the way they are written on a South African invoice. */
+export function formatRand(amount: number): string {
+  return new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: "ZAR",
+    minimumFractionDigits: 2,
+  }).format(amount)
+}

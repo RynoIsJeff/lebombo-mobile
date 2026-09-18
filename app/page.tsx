@@ -10,6 +10,7 @@ import {
   Check,
   Clock,
   FileEdit,
+  PenLine,
   AlertTriangle,
   Settings as SettingsIcon,
 } from "lucide-react"
@@ -32,6 +33,7 @@ function JobRow({ card }: { card: JobCard }) {
     { label: string; className: string; Icon: typeof Check }
   > = {
     draft: { label: "Draft", className: "bg-[#F1EFEA] text-[#6E6A63]", Icon: FileEdit },
+    signing: { label: "To sign", className: "bg-[#EDE9FB] text-[#5B3FBF]", Icon: PenLine },
     queued: { label: "Waiting", className: "bg-[#FEF6E0] text-[#B45309]", Icon: Clock },
     syncing: { label: "Sending", className: "bg-[#EAF2FB] text-deep-navy", Icon: RefreshCw },
     synced: { label: "Sent", className: "bg-[#E7F5EC] text-[#1B7F47]", Icon: Check },
@@ -41,7 +43,7 @@ function JobRow({ card }: { card: JobCard }) {
 
   return (
     <Link
-      href={`/job?id=${card.localId}`}
+      href={card.status === "signing" ? `/sign?id=${card.localId}` : `/job?id=${card.localId}`}
       className="flex items-center gap-3 px-4 py-3.5 active:bg-[#FAF9F6] transition-colors"
     >
       <div className="min-w-0 flex-1">
@@ -96,11 +98,13 @@ export default function HomePage() {
   }, [load, version])
 
   const drafts = cards?.filter((c) => c.status === "draft") ?? []
+  const toSign = cards?.filter((c) => c.status === "signing") ?? []
   const pending = cards?.filter((c) => ["queued", "syncing", "failed"].includes(c.status)) ?? []
   const sent = cards?.filter((c) => c.status === "synced") ?? []
 
   const groups = [
     { key: "drafts", title: "Not finished", cards: drafts },
+    { key: "signing", title: "Waiting for a signature", cards: toSign },
     { key: "pending", title: "Waiting to send", cards: pending },
     { key: "sent", title: "Sent to the office", cards: sent },
   ].filter((g) => g.cards.length > 0)
