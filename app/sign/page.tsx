@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { ChevronLeft, PenLine, Check, X } from "lucide-react"
 import { getJobCard, getSettings, putJobCard } from "@/lib/db"
-import { totalHours, visitHours, formatRand } from "@/lib/hours"
+import { totalHours, visitHours } from "@/lib/hours"
 import type { JobCard } from "@/lib/types"
 import { SignaturePad } from "@/components/signature-pad"
 import { useSync } from "../app-chrome"
@@ -19,20 +19,10 @@ const formatDate = (iso: string) =>
 
 const formatQty = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[#8A8A8A]">
-        {label}
-      </div>
-      <div className="mt-0.5 text-[14px] text-charcoal">{value}</div>
-    </div>
-  )
-}
-
+/** Section heading, matching the printed job card. */
 function Heading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-[11px] font-semibold uppercase tracking-[0.11em] text-deep-navy mb-2">
+    <h2 className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-deep-navy mb-2">
       {children}
     </h2>
   )
@@ -41,10 +31,13 @@ function Heading({ children }: { children: React.ReactNode }) {
 /**
  * The finished job card, as the store manager sees it before signing.
  *
- * This is deliberately a document, not a form. The technician hands their phone
- * over at this point, so nothing here is editable and none of our input fields
- * are on screen — the manager reads the work that was done and signs for it,
- * exactly as they did on the carbon-copy book.
+ * Two things govern what is on this screen. It is a document, not a form — the
+ * technician hands their phone over, so none of our input fields are here. And
+ * it is the same document the store's head office is sent for payment, so it
+ * carries no money: what the parts cost us stays in the office.
+ *
+ * It deliberately mirrors lib/job-card-template.tsx on the platform, section for
+ * section, so what the manager signs is what prints.
  */
 function SignSheet() {
   const router = useRouter()
@@ -122,11 +115,12 @@ function SignSheet() {
 
   const hours = totalHours(card.visits)
   const materials = card.materials.filter((m) => m.description.trim())
+  const workDone = card.items.filter((i) => i.trim())
   const alreadySigned = card.status !== "draft" && card.status !== "signing"
 
   return (
     <>
-      {/* The only way back into the form, and it goes once it is signed. */}
+      {/* The technician's way back to correct something. Gone once it is signed. */}
       {!alreadySigned && !signing && (
         <header
           className="sticky top-0 z-20 bg-paper/95 backdrop-blur px-3 py-2 flex items-center border-b border-hairline"
@@ -143,144 +137,222 @@ function SignSheet() {
       )}
 
       <main className="flex-1 px-4 py-5 pb-56">
-        {/* The job card itself, laid out like the printed one. */}
         <div className="card overflow-hidden">
-          <div className="px-5 pt-5 pb-4 border-b-2 border-sun-yellow">
+          {/* Letterhead */}
+          <div className="px-5 pt-5 pb-4 border-b-[3px] border-sun-yellow">
             <div className="flex items-start gap-3">
               <Image
                 src="/icon-192.png"
                 alt=""
-                width={42}
-                height={42}
+                width={44}
+                height={44}
                 className="rounded-lg shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <div className="font-heading font-bold text-[17px] leading-tight text-charcoal">
+                <div className="font-heading font-bold text-[18px] leading-none text-charcoal">
                   LEBOMBO
                 </div>
-                <div className="text-[10.5px] font-semibold tracking-[0.08em] text-burnt-orange">
+                <div className="mt-0.5 text-[10px] font-bold tracking-[0.08em] text-burnt-orange leading-tight">
                   REPAIRS AND MAINTENANCE
                 </div>
+                <div className="mt-0.5 text-[9px] text-steel-grey leading-tight">
+                  (Pty) Ltd. 2017/390176/07
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <div className="text-[10.5px] text-steel-grey leading-snug">
+                447 Suikerbekkie Avenue
+                <br />
+                Pongola, KZN, 3170
               </div>
               <div className="text-right shrink-0">
-                <div className="font-heading font-bold text-[15px] text-deep-navy">JOB CARD</div>
-                <div className="text-[11px] text-steel-grey">
-                  {card.jobCardNumber ? `No. ${card.jobCardNumber}` : "Number issued by office"}
+                <div className="font-heading font-bold text-[17px] text-deep-navy leading-none">
+                  JOB CARD
+                </div>
+                <div className="mt-1 text-[15px] font-bold text-burnt-orange leading-none">
+                  {card.jobCardNumber ? `No. ${card.jobCardNumber}` : "No. —"}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="px-5 py-4 grid grid-cols-2 gap-4 border-b border-[#F1EFEA]">
-            <Row label="Customer" value={card.storeName} />
-            <Row label="Date" value={formatDate(card.visits[0]?.visitDate ?? card.createdAt)} />
-            {card.orderNumber && <Row label="Order number" value={card.orderNumber} />}
-            {card.unitNumber && <Row label="Unit" value={card.unitNumber} />}
-            <Row label="Technician" value={technician.name} />
-            {hours !== null && <Row label="Time on site" value={`${hours} hours`} />}
-          </div>
-
-          <div className="px-5 py-4 border-b border-[#F1EFEA]">
-            <Heading>Time on site</Heading>
-            <div className="space-y-1.5">
-              {card.visits.map((v, i) => {
-                const h = visitHours(v.timeIn, v.timeOut)
-                return (
-                  <div key={i} className="flex justify-between gap-3 text-[13.5px]">
-                    <span className="text-charcoal">{formatDate(v.visitDate)}</span>
-                    <span className="text-steel-grey">
-                      {v.timeIn || "—"} – {v.timeOut || "—"}
-                      {h !== null && ` · ${h} h`}
-                    </span>
-                  </div>
-                )
-              })}
+          {/* Customer / attended by */}
+          <div className="px-5 py-4 border-b border-[#F1EFEA] grid grid-cols-2 gap-4">
+            <div>
+              <Heading>Customer</Heading>
+              <p className="text-[13.5px] font-semibold text-charcoal">{card.storeName}</p>
+              {card.unitNumber && (
+                <p className="text-[12px] text-steel-grey">Unit: {card.unitNumber}</p>
+              )}
+            </div>
+            <div>
+              <Heading>Attended by</Heading>
+              <p className="text-[13.5px] font-semibold text-charcoal">{technician.name}</p>
+              <p className="text-[12px] text-steel-grey">
+                {card.visits.length === 1 ? "1 visit" : `${card.visits.length} visits`}
+                {hours !== null && ` · ${hours} hours on site`}
+              </p>
             </div>
           </div>
 
+          <div className="px-5 py-4 border-b border-[#F1EFEA] grid grid-cols-2 gap-4">
+            <div>
+              <Heading>Date</Heading>
+              <p className="text-[13.5px] text-charcoal">
+                {formatDate(card.visits[0]?.visitDate ?? card.createdAt)}
+              </p>
+            </div>
+            {card.orderNumber && (
+              <div>
+                <Heading>Order number</Heading>
+                <p className="text-[13.5px] text-charcoal">{card.orderNumber}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Time on site */}
           <div className="px-5 py-4 border-b border-[#F1EFEA]">
-            <Heading>Work done</Heading>
-            <ol className="list-decimal list-inside space-y-1">
-              {card.items
-                .filter((i) => i.trim())
-                .map((item, i) => (
-                  <li key={i} className="text-[13.5px] text-charcoal whitespace-pre-wrap">
+            <Heading>Time on site</Heading>
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="bg-deep-navy text-white">
+                  {["Date", "In", "Out", "Hours"].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`px-2 py-1.5 font-bold uppercase text-[9.5px] tracking-[0.06em] ${
+                        i === 3 ? "text-right" : "text-left"
+                      }`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {card.visits.map((v, i) => {
+                  const h = visitHours(v.timeIn, v.timeOut)
+                  return (
+                    <tr key={i} className="border-b border-[#E5E5E5] last:border-0">
+                      <td className="px-2 py-1.5 text-charcoal">{formatDate(v.visitDate)}</td>
+                      <td className="px-2 py-1.5 text-steel-grey">{v.timeIn || "—"}</td>
+                      <td className="px-2 py-1.5 text-steel-grey">{v.timeOut || "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-charcoal">
+                        {h === null ? "—" : `${h} h`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              {card.visits.length > 1 && hours !== null && (
+                <tfoot>
+                  <tr className="border-t-2 border-deep-navy">
+                    <td colSpan={3} className="px-2 py-1.5 font-bold text-charcoal">
+                      Total
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-bold text-charcoal">{hours} h</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {/* Job description */}
+          <div className="px-5 py-4 border-b border-[#F1EFEA]">
+            <Heading>Job description</Heading>
+            {workDone.length === 0 ? (
+              <p className="text-[12.5px] italic text-[#9A9A9A]">No job description recorded.</p>
+            ) : (
+              <ol className="list-decimal list-inside space-y-1">
+                {workDone.map((item, i) => (
+                  <li key={i} className="text-[13px] text-charcoal whitespace-pre-wrap">
                     {item}
                   </li>
                 ))}
-            </ol>
+              </ol>
+            )}
           </div>
 
+          {/* Material / spares — quantities only, as on the printed card */}
           {materials.length > 0 && (
             <div className="px-5 py-4 border-b border-[#F1EFEA]">
               <Heading>Material / spares</Heading>
-              <div className="space-y-1.5">
-                {materials.map((m, i) => (
-                  <div key={i} className="flex justify-between gap-3 text-[13.5px]">
-                    <span className="text-charcoal min-w-0">
-                      {m.description}
-                      {m.quantity !== 1 && (
-                        <span className="text-steel-grey"> × {formatQty(m.quantity)}</span>
-                      )}
-                    </span>
-                    {m.unitCost !== null && (
-                      <span className="text-steel-grey shrink-0 tabular-nums">
-                        {formatRand(m.unitCost * m.quantity)}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="bg-deep-navy text-white">
+                    <th className="px-2 py-1.5 text-left font-bold uppercase text-[9.5px] tracking-[0.06em]">
+                      Description
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-bold uppercase text-[9.5px] tracking-[0.06em]">
+                      Qty
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materials.map((m, i) => (
+                    <tr key={i} className="border-b border-[#E5E5E5] last:border-0">
+                      <td className="px-2 py-1.5 text-charcoal">{m.description}</td>
+                      <td className="px-2 py-1.5 text-right text-charcoal">
+                        {formatQty(m.quantity)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
           {card.notes.trim() && (
             <div className="px-5 py-4 border-b border-[#F1EFEA]">
               <Heading>Notes</Heading>
-              <p className="text-[13.5px] text-steel-grey whitespace-pre-wrap">{card.notes}</p>
+              <p className="text-[12.5px] text-steel-grey whitespace-pre-wrap">{card.notes}</p>
             </div>
           )}
 
-          <div className="px-5 py-4">
-            <Heading>Signed by</Heading>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Signatures */}
+          <div className="px-5 py-5">
+            <div className="grid grid-cols-2 gap-5">
               <div>
-                <div className="h-14 flex items-end border-b border-charcoal">
+                <div className="h-12 flex items-end border-b border-charcoal">
                   {technician.signature && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={technician.signature}
                       alt=""
-                      className="max-h-14 max-w-full w-auto object-contain"
+                      className="max-h-12 max-w-full w-auto object-contain"
                     />
                   )}
                 </div>
-                <div className="mt-1.5 text-[12.5px] font-semibold text-charcoal">
-                  {technician.name}
-                </div>
-                <div className="text-[10px] uppercase tracking-[0.06em] text-[#8A8A8A]">
+                <div className="mt-1.5 text-[12px] font-bold text-charcoal">{technician.name}</div>
+                <div className="text-[9.5px] uppercase tracking-[0.06em] text-steel-grey">
                   Technician
                 </div>
               </div>
               <div>
-                <div className="h-14 flex items-end border-b border-charcoal">
+                <div className="h-12 flex items-end border-b border-charcoal">
                   {signature && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={signature}
                       alt=""
-                      className="max-h-14 max-w-full w-auto object-contain"
+                      className="max-h-12 max-w-full w-auto object-contain"
                     />
                   )}
                 </div>
-                <div className="mt-1.5 text-[12.5px] font-semibold text-charcoal min-h-[18px]">
+                <div className="mt-1.5 text-[12px] font-bold text-charcoal min-h-[16px]">
                   {name || "—"}
                 </div>
-                <div className="text-[10px] uppercase tracking-[0.06em] text-[#8A8A8A]">
-                  Store manager
+                <div className="text-[9.5px] uppercase tracking-[0.06em] text-steel-grey">
+                  Store Manager / Dept Head
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="px-5 py-3 border-t-2 border-sun-yellow">
+            <p className="text-[10px] text-steel-grey leading-snug">
+              Logged in the field and signed off on site.
+            </p>
           </div>
         </div>
 
