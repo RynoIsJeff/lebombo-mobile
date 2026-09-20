@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { getSettings, saveSettings } from "@/lib/db"
-import { refreshClients } from "@/lib/sync"
+import { getSettings } from "@/lib/db"
+import { pairDevice, refreshClients } from "@/lib/sync"
 import { SignaturePad } from "@/components/signature-pad"
 
 export default function SetupPage() {
@@ -15,11 +15,9 @@ export default function SetupPage() {
   const [signature, setSignature] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [apiBase, setApiBase] = useState("")
 
   useEffect(() => {
     getSettings().then((s) => {
-      setApiBase(s.apiBase)
       // Re-pairing after a revoke keeps the details already entered.
       if (s.technicianName) setTechnicianName(s.technicianName)
       if (s.deviceLabel) setDeviceLabel(s.deviceLabel)
@@ -41,35 +39,19 @@ export default function SetupPage() {
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(`${apiBase}/api/mobile/pair`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessCode: accessCode.trim(),
-          technicianName: technicianName.trim(),
-          deviceLabel: deviceLabel.trim() || null,
-          signature,
-        }),
+      const result = await pairDevice({
+        accessCode,
+        technicianName,
+        deviceLabel,
+        signature,
       })
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        setError(data.error ?? "Could not set this phone up. Check the code and try again.")
+      if (!result.ok) {
+        setError(result.error ?? "Could not set this phone up. Check the code and try again.")
         return
       }
-
-      await saveSettings({
-        token: data.token,
-        technicianName: technicianName.trim(),
-        deviceLabel: deviceLabel.trim(),
-        signature,
-        deviceRevoked: false,
-      })
       // Pull the store list now, while there is definitely a connection.
       await refreshClients().catch(() => {})
       router.replace("/")
-    } catch {
-      setError("Could not reach the office. Check your connection and try again.")
     } finally {
       setBusy(false)
     }

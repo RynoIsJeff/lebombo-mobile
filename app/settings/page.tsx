@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronLeft, RefreshCw, Store, LogOut } from "lucide-react"
+import { ChevronLeft, RefreshCw, Store, LogOut, Link2 } from "lucide-react"
 import { getSettings, saveSettings } from "@/lib/db"
-import { refreshClients } from "@/lib/sync"
+import { pairDevice, refreshClients } from "@/lib/sync"
 import { SignaturePad } from "@/components/signature-pad"
 import type { Settings } from "@/lib/types"
 import { useSync } from "../app-chrome"
@@ -21,15 +21,23 @@ function formatWhen(iso: string | null) {
 
 export default function MobileSettingsPage() {
   const router = useRouter()
-  const { online } = useSync()
+  const { online, runSync } = useSync()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [code, setCode] = useState("")
+  const [reconnectError, setReconnectError] = useState<string | null>(null)
 
   useEffect(() => {
     getSettings().then((s) => {
       if (!s.token) router.replace("/setup")
-      else setSettings(s)
+      else {
+        setSettings(s)
+        // Open straight onto the code field when the office has stopped
+        // recognising this phone — that is the only reason to be here.
+        if (s.deviceRevoked) setReconnecting(true)
+      }
     })
   }, [router])
 
@@ -52,6 +60,37 @@ export default function MobileSettingsPage() {
       )
     } catch {
       setMessage("Could not reach the office")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Reconnect with nothing but the access code. The name and signature already
+   * on the phone go back up as they are, so a technician does not have to sign
+   * again standing at the roadside — and no job card is touched.
+   */
+  const reconnect = async () => {
+    setBusy(true)
+    setReconnectError(null)
+    try {
+      const result = await pairDevice({
+        accessCode: code,
+        technicianName: settings.technicianName,
+        deviceLabel: settings.deviceLabel,
+        signature: settings.signature,
+      })
+      if (!result.ok) {
+        setReconnectError(result.error ?? "Could not connect this phone.")
+        return
+      }
+      setSettings(await getSettings())
+      setReconnecting(false)
+      setCode("")
+      setMessage(null)
+      // Anything waiting goes now that the office knows this phone again.
+      runSync({ silent: true })
+      router.push("/")
     } finally {
       setBusy(false)
     }
@@ -141,6 +180,83 @@ export default function MobileSettingsPage() {
               <p className="mt-2.5 text-center text-[13px] text-steel-grey">{message}</p>
             )}
           </div>
+        </section>
+
+        <section>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.11em] text-[#8A8A8A] mb-2">
+            Connection
+          </h2>
+
+          {settings.deviceRevoked && (
+            <div className="rounded-xl border border-[#F0C9C4] bg-[#FDECEA] px-4 py-3 mb-3">
+              <p className="text-[13px] text-[#A93226]">
+                <strong className="font-semibold">
+                  The office does not recognise this phone.
+                </strong>{" "}
+                Your job cards are all still here. Enter the access code to connect again
+                and they will send themselves.
+              </p>
+            </div>
+          )}
+
+          {reconnecting ? (
+            <div className="card p-4 space-y-4">
+              <div>
+                <label className="field-label" htmlFor="code">
+                  Access code
+                </label>
+                <input
+                  id="code"
+                  className="field-input font-mono tracking-wider uppercase"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="XXXX-XXXX-XX"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
+                  autoFocus
+                />
+                <p className="mt-1.5 text-[12.5px] text-steel-grey">
+                  From the office. Your name and signature stay as they are.
+                </p>
+              </div>
+
+              {reconnectError && (
+                <div className="rounded-xl border border-[#F0C9C4] bg-[#FDECEA] px-4 py-2.5 text-[13px] text-[#A93226]">
+                  {reconnectError}
+                </div>
+              )}
+
+              <button
+                onClick={reconnect}
+                disabled={busy || !code.trim()}
+                className="btn-primary"
+              >
+                <Link2 className="h-[18px] w-[18px]" />
+                {busy ? "Connecting…" : "Connect this phone"}
+              </button>
+              <button
+                onClick={() => {
+                  setReconnecting(false)
+                  setReconnectError(null)
+                  setCode("")
+                }}
+                disabled={busy}
+                className="btn-secondary h-11"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setReconnecting(true)}
+              className={settings.deviceRevoked ? "btn-primary" : "btn-secondary"}
+            >
+              <Link2 className="h-[18px] w-[18px]" />
+              Reconnect this phone
+            </button>
+          )}
         </section>
 
         <section>

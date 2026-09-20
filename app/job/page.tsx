@@ -23,8 +23,13 @@ import { emptyJobCard, type CachedClient, type JobCard } from "@/lib/types"
 import { StorePicker } from "@/components/store-picker"
 import { useSync } from "../app-chrome"
 
-/** Check-in and check-out are recorded on the hour, never to the minute. */
-const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00")
+/**
+ * Check-in and check-out are recorded on the hour. Minutes are there for the
+ * odd job that genuinely ran to a quarter, and sit at 00 until someone changes
+ * them — there is no free minute dial to fumble on site.
+ */
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"))
+const MINUTES = ["00", "15", "30", "45"]
 
 function Section({
   title,
@@ -306,38 +311,70 @@ function JobForm() {
                       }}
                     />
                     <div className="grid grid-cols-2 gap-3">
-                      {(["timeIn", "timeOut"] as const).map((key) => (
-                        <div key={key}>
-                          <label className="block text-[12px] text-steel-grey mb-1">
-                            {key === "timeIn" ? "Time in" : "Time out"}
-                          </label>
-                          {/* Whole hours only. A dropdown rather than a time
-                              input, because a phone's time picker always
-                              offers a minute dial however it is configured. */}
-                          <select
-                            className="field-input"
-                            value={visit[key]}
-                            onChange={(e) => {
-                              const visits = [...card.visits]
-                              visits[index] = { ...visit, [key]: e.target.value }
-                              update({ visits })
-                            }}
-                          >
-                            <option value="">—</option>
-                            {/* A time recorded before this was hours-only stays
-                                selectable, so opening an old card does not
-                                quietly change what was written. */}
-                            {visit[key] && !HOURS.includes(visit[key]) && (
-                              <option value={visit[key]}>{visit[key]}</option>
-                            )}
-                            {HOURS.map((h) => (
-                              <option key={h} value={h}>
-                                {h}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+                      {(["timeIn", "timeOut"] as const).map((key) => {
+                        const label = key === "timeIn" ? "Time in" : "Time out"
+                        const [hour = "", minute = ""] = (visit[key] || "").split(":")
+
+                        // Hour decides whether there is a time at all; clearing
+                        // it clears the reading. Minutes sit at 00 unless
+                        // someone deliberately changes them.
+                        const setTime = (nextHour: string, nextMinute: string) => {
+                          const visits = [...card.visits]
+                          visits[index] = {
+                            ...visit,
+                            [key]: nextHour === "" ? "" : `${nextHour}:${nextMinute || "00"}`,
+                          }
+                          update({ visits })
+                        }
+
+                        return (
+                          <div key={key}>
+                            <label className="block text-[12px] text-steel-grey mb-1">
+                              {label}
+                            </label>
+                            {/* Two plain dropdowns rather than a time input: a
+                                phone's time picker always offers a free minute
+                                dial however it is configured. */}
+                            <div className="flex items-center gap-1">
+                              <select
+                                aria-label={`${label} hour`}
+                                className="field-input px-1 text-center flex-1 min-w-0"
+                                value={hour}
+                                onChange={(e) => setTime(e.target.value, minute)}
+                              >
+                                <option value="">—</option>
+                                {HOURS.map((h) => (
+                                  <option key={h} value={h}>
+                                    {h}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="text-[13px] font-semibold text-steel-grey">:</span>
+                              <select
+                                aria-label={`${label} minutes`}
+                                className="field-input px-1 text-center flex-1 min-w-0 disabled:opacity-40"
+                                // Minutes on their own mean nothing, so this
+                                // stays shut until an hour is picked.
+                                disabled={!hour}
+                                value={minute || "00"}
+                                onChange={(e) => setTime(hour, e.target.value)}
+                              >
+                                {/* A reading taken off the quarter hour before
+                                    now stays selectable, so opening an older
+                                    card does not quietly change what it says. */}
+                                {minute && !MINUTES.includes(minute) && (
+                                  <option value={minute}>{minute}</option>
+                                )}
+                                {MINUTES.map((m) => (
+                                  <option key={m} value={m}>
+                                    {m}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )

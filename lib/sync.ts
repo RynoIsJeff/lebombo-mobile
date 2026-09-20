@@ -279,3 +279,61 @@ export async function refreshClients(): Promise<CachedClient[] | null> {
   })
   return data.clients
 }
+
+export interface PairResult {
+  ok: boolean
+  error?: string
+}
+
+/**
+ * Exchange the office's access code for a token this phone can sync with.
+ *
+ * Used for first setup and for reconnecting a phone the office no longer
+ * recognises. Reconnecting passes back the name and signature already held
+ * here, so a technician standing in a yard only has to type the code — and the
+ * job cards on the phone are never touched either way.
+ */
+export async function pairDevice(opts: {
+  accessCode: string
+  technicianName: string
+  deviceLabel: string
+  signature: string | null
+}): Promise<PairResult> {
+  const settings = await getSettings()
+  if (!settings.apiBase) {
+    return { ok: false, error: "This phone has no office address configured." }
+  }
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return { ok: false, error: "Connecting needs signal, just this once." }
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${settings.apiBase}/api/mobile/pair`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessCode: opts.accessCode.trim(),
+        technicianName: opts.technicianName.trim(),
+        deviceLabel: opts.deviceLabel.trim() || null,
+        signature: opts.signature,
+      }),
+    })
+  } catch {
+    return { ok: false, error: "Could not reach the office. Check your connection." }
+  }
+
+  const data = await response.json().catch(() => ({}) as any)
+  if (!response.ok) {
+    return { ok: false, error: data.error ?? "Could not connect this phone." }
+  }
+
+  await saveSettings({
+    token: data.token,
+    technicianName: opts.technicianName.trim(),
+    deviceLabel: opts.deviceLabel.trim(),
+    signature: opts.signature,
+    deviceRevoked: false,
+  })
+  return { ok: true }
+}

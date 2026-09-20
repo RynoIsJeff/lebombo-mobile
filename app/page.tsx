@@ -137,14 +137,14 @@ export default function HomePage() {
       {revoked && (
         <div className="px-5 pb-4">
           <Link
-            href="/setup"
+            href="/settings"
             className="flex items-start gap-2.5 rounded-xl border border-[#F0C9C4] bg-[#FDECEA] px-4 py-3 active:bg-[#FBDDD9] transition-colors"
           >
             <AlertTriangle className="h-4 w-4 text-[#A93226] mt-0.5 shrink-0" />
             <span className="text-[13px] text-[#A93226]">
               <strong className="font-semibold">This phone lost its connection to the office.</strong>{" "}
-              Nothing has been lost — every job card is still here. Tap to set the phone up
-              again and they will send themselves.
+              Nothing has been lost — every job card is still here. Tap to enter the access code
+              and they will send themselves.
             </span>
           </Link>
         </div>
