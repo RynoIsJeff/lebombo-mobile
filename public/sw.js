@@ -7,7 +7,7 @@
  * about whether work reached the office.
  */
 
-const VERSION = "v2"
+const VERSION = "v3"
 const SHELL_CACHE = `lebombo-shell-${VERSION}`
 const ASSET_CACHE = `lebombo-assets-${VERSION}`
 

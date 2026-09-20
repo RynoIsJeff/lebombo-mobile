@@ -79,7 +79,7 @@ function JobRow({ card }: { card: JobCard }) {
 
 export default function HomePage() {
   const router = useRouter()
-  const { online, syncing, version, runSync } = useSync()
+  const { online, syncing, version, runSync, lastResult } = useSync()
   const [cards, setCards] = useState<JobCard[] | null>(null)
   const [technicianName, setTechnicianName] = useState("")
   const [revoked, setRevoked] = useState(false)
@@ -189,6 +189,9 @@ export default function HomePage() {
             Keep working — job cards save on this phone and send themselves when signal
             comes back.
           </p>
+        )}
+        {online && lastResult?.error && (
+          <p className="mt-2 text-[12.5px] text-[#A93226]">{lastResult.error}</p>
         )}
       </div>
 

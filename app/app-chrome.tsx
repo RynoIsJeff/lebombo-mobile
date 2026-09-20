@@ -48,7 +48,10 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     setSyncing(true)
     try {
       const result = await syncNow()
-      if (!opts?.silent) setLastResult(result)
+      // A silent sync still records a failure. Most syncs here are automatic,
+      // and swallowing their errors is how a phone ends up sitting there
+      // sending nothing with no explanation on screen.
+      if (!opts?.silent || result.error) setLastResult(result)
       setVersion((v) => v + 1)
       return result
     } finally {
@@ -60,15 +63,56 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   /* Service worker: what makes the app open with no signal. */
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // Not fatal — the app still works, it just will not open offline.
-    })
+
+    // Whether this page is already being served by a worker. If it is, a later
+    // change of controller means a NEW version has taken over and the page is
+    // still running the old code.
+    const hadController = !!navigator.serviceWorker.controller
+
+    let registration: ServiceWorkerRegistration | null = null
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => {
+        registration = reg
+      })
+      .catch(() => {
+        // Not fatal — the app still works, it just will not open offline.
+      })
+
+    /**
+     * Installed on a home screen, this app can be resumed from the recents list
+     * for weeks without ever navigating, so a deployed fix would never reach the
+     * phone. Check for a new version whenever it comes to the foreground.
+     */
+    const checkForUpdate = () => {
+      if (document.visibilityState === "visible") {
+        registration?.update().catch(() => {})
+      }
+    }
+    checkForUpdate()
+    document.addEventListener("visibilitychange", checkForUpdate)
+
+    // A new worker has taken over: the code on screen is stale, so reload once
+    // to pick it up. Guarded, because this also fires the first time a worker
+    // ever claims the page, when there is nothing stale to replace.
+    let reloading = false
+    const onControllerChange = () => {
+      if (!hadController || reloading) return
+      reloading = true
+      window.location.reload()
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange)
 
     const onMessage = (event: MessageEvent) => {
       if (event.data?.type === "sync-now") runSync({ silent: true })
     }
     navigator.serviceWorker.addEventListener("message", onMessage)
-    return () => navigator.serviceWorker.removeEventListener("message", onMessage)
+
+    return () => {
+      document.removeEventListener("visibilitychange", checkForUpdate)
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange)
+      navigator.serviceWorker.removeEventListener("message", onMessage)
+    }
   }, [runSync])
 
   /* Connection state, and a sync the moment it comes back. */
