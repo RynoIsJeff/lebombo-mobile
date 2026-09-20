@@ -35,7 +35,7 @@ function JobRow({ card }: { card: JobCard }) {
     draft: { label: "Draft", className: "bg-[#F1EFEA] text-[#6E6A63]", Icon: FileEdit },
     signing: { label: "To sign", className: "bg-[#EDE9FB] text-[#5B3FBF]", Icon: PenLine },
     queued: { label: "Waiting", className: "bg-[#FEF6E0] text-[#B45309]", Icon: Clock },
-    syncing: { label: "Sending", className: "bg-[#EAF2FB] text-deep-navy", Icon: RefreshCw },
+    syncing: { label: "Synching", className: "bg-[#EAF2FB] text-deep-navy", Icon: RefreshCw },
     synced: { label: "Sent", className: "bg-[#E7F5EC] text-[#1B7F47]", Icon: Check },
     failed: { label: "Problem", className: "bg-[#FDECEA] text-[#A93226]", Icon: AlertTriangle },
   }
@@ -181,12 +181,12 @@ export default function HomePage() {
             {!online
               ? pending.length > 0
                 ? `No signal · ${pending.length} waiting`
-                : "No signal · everything is sent"
+                : "No signal · synched to office"
               : syncing
-                ? "Sending…"
+                ? "Synching…"
                 : pending.length > 0
                   ? `${pending.length} waiting · tap to send`
-                  : "Everything is sent"}
+                  : "Synched to office"}
           </span>
         </button>
         {!online && (
