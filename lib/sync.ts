@@ -29,6 +29,25 @@ export function isReadyToSync(card: JobCard): boolean {
   return card.status === "queued" || card.status === "failed"
 }
 
+/**
+ * Put back anything left marked "sending".
+ *
+ * A card is only "sending" while a request is genuinely in the air, and that
+ * status is written to the phone so the list can show it. If the app is closed,
+ * the page reloads, or the phone dies mid-upload, that is the state that
+ * survives — and nothing ever picks it up again, because only queued and failed
+ * cards are offered to the office. The work sits there looking busy forever.
+ *
+ * Run before every sync, when by definition nothing of ours is in flight.
+ */
+export async function recoverInterruptedSyncs(): Promise<number> {
+  const stuck = (await allJobCards()).filter((c) => c.status === "syncing")
+  for (const card of stuck) {
+    await putJobCardRaw({ ...card, status: "queued" })
+  }
+  return stuck.length
+}
+
 function payload(card: JobCard) {
   return {
     clientUuid: card.localId,
@@ -174,6 +193,13 @@ async function sendBatch(batch: JobCard[], settings: Settings): Promise<BatchOut
  * connection halfway through costs nothing.
  */
 export async function syncNow(): Promise<SyncResult> {
+  // First, and before any reason to give up: nothing of ours can genuinely be
+  // in the air here, so anything still marked "sending" was left that way by a
+  // run that never finished. This has to happen even with no signal and even
+  // on a phone the office has stopped recognising — otherwise those cards stay
+  // stuck exactly when someone is looking at them wondering why.
+  await recoverInterruptedSyncs()
+
   const settings = await getSettings()
   if (!settings.token || !settings.apiBase) {
     return { sent: 0, failed: 0, offline: false, error: "This phone is not set up yet" }
