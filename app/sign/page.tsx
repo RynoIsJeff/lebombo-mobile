@@ -313,13 +313,13 @@ function SignSheet() {
           <div className="px-5 py-5">
             <div className="grid grid-cols-2 gap-5">
               <div>
-                <div className="h-12 flex items-end border-b border-charcoal">
+                <div className="relative h-12 border-b border-charcoal">
                   {technician.signature && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={technician.signature}
                       alt=""
-                      className="max-h-12 max-w-full w-auto object-contain"
+                      className="absolute left-0.5 bottom-px max-h-12 max-w-full w-auto object-contain mix-blend-multiply"
                     />
                   )}
                 </div>
@@ -329,13 +329,13 @@ function SignSheet() {
                 </div>
               </div>
               <div>
-                <div className="h-12 flex items-end border-b border-charcoal">
+                <div className="relative h-12 border-b border-charcoal">
                   {signature && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={signature}
                       alt=""
-                      className="max-h-12 max-w-full w-auto object-contain"
+                      className="absolute left-0.5 bottom-px max-h-12 max-w-full w-auto object-contain mix-blend-multiply"
                     />
                   )}
                 </div>

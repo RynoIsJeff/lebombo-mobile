@@ -10,7 +10,7 @@ import type { CachedClient, JobCard, Settings } from "./types"
 export interface SyncResult {
   sent: number
   failed: number
-  /** Delivered cards the office has since deleted, removed from this phone. */
+  /** Delivered cards the office is done with — invoiced or deleted — let go. */
   dropped?: number
   /** Not an error the technician did anything about — there was just no signal. */
   offline: boolean
@@ -187,10 +187,11 @@ async function sendBatch(batch: JobCard[], settings: Settings): Promise<BatchOut
  * Works through the whole backlog a batch at a time, which matters after a week
  * out of coverage — one tap should clear the phone, not the first ten cards.
  *
- * Nothing is deleted locally on success: the card stays, now carrying the number
- * it was given, so the technician can still show a customer what they logged
- * last week. Cards the office rejects keep their place and retry, so a dropped
- * connection halfway through costs nothing.
+ * A delivered card stays on the phone, carrying the number it was given, until
+ * the office invoices it — the technician can still show a customer what they
+ * logged last week, and it clears itself once the job is billed. Cards the
+ * office rejects keep their place and retry, so a dropped connection halfway
+ * through costs nothing.
  */
 export async function syncNow(): Promise<SyncResult> {
   // First, and before any reason to give up: nothing of ours can genuinely be
@@ -231,7 +232,7 @@ export async function syncNow(): Promise<SyncResult> {
     }
   }
 
-  const dropped = await reconcileDeletions(settings)
+  const dropped = await reconcileFinishedCards(settings)
 
   await refreshClients().catch(() => {})
   await saveSettings({ lastSyncAt: new Date().toISOString() })
@@ -240,18 +241,19 @@ export async function syncNow(): Promise<SyncResult> {
 }
 
 /**
- * Ask the office which of the cards this phone has already delivered still
- * exist, and drop the ones that do not.
+ * Ask the office which of the cards this phone has already delivered are
+ * finished with, and let those go.
  *
- * Without this the phone keeps showing a card as "Sent" forever, even after the
- * office has deleted it — the technician would be looking at a job the business
- * no longer has any record of.
+ * A card is finished with once it has been invoiced — the office holds the
+ * record and the signed PDF from then on, and the technician has no reason to
+ * carry it around. It is also finished with if the office deleted it, since
+ * showing it as "Sent" would be a lie about work the business has no record of.
  *
  * Only delivered cards are ever offered up. A draft, or anything still waiting
  * to send, has never left the phone, so the office cannot have an opinion on it
  * and it is never at risk here.
  */
-async function reconcileDeletions(settings: Settings): Promise<number> {
+async function reconcileFinishedCards(settings: Settings): Promise<number> {
   const delivered = (await allJobCards()).filter((c) => c.status === "synced")
   if (delivered.length === 0) return 0
 
@@ -269,12 +271,16 @@ async function reconcileDeletions(settings: Settings): Promise<number> {
     })
     if (!response.ok) return 0
 
-    const data = (await response.json()) as { removed?: string[] }
-    const removed = Array.isArray(data.removed) ? data.removed : []
-    for (const localId of removed) {
+    const data = (await response.json()) as { removed?: string[]; invoiced?: string[] }
+    // Deleted and invoiced both mean the same thing to the phone: done with.
+    const finished = new Set([
+      ...(Array.isArray(data.removed) ? data.removed : []),
+      ...(Array.isArray(data.invoiced) ? data.invoiced : []),
+    ])
+    for (const localId of Array.from(finished)) {
       await deleteJobCard(localId)
     }
-    return removed.length
+    return finished.size
   } catch {
     // Reconciling is housekeeping. Failing it must never fail a sync that has
     // just successfully delivered a technician's work.

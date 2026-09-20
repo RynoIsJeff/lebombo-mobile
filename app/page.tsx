@@ -108,7 +108,12 @@ export default function HomePage() {
     { key: "drafts", title: "Not finished", cards: drafts },
     { key: "signing", title: "Waiting for a signature", cards: toSign },
     { key: "pending", title: "Waiting to send", cards: pending },
-    { key: "sent", title: "Sent to the office", cards: sent },
+    {
+      key: "sent",
+      title: "Sent to the office",
+      cards: sent,
+      hint: "These clear once the office has invoiced them.",
+    },
   ].filter((g) => g.cards.length > 0)
 
   return (
@@ -209,9 +214,12 @@ export default function HomePage() {
           <div className="space-y-6">
             {groups.map((group) => (
               <section key={group.key}>
-                <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.11em] text-[#8A8A8A]">
+                <h2 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.11em] text-[#8A8A8A]">
                   {group.title} · {group.cards.length}
                 </h2>
+                {group.hint && (
+                  <p className="mb-2 text-[12px] text-steel-grey">{group.hint}</p>
+                )}
                 <div className="card divide-y divide-[#F1EFEA] overflow-hidden">
                   {group.cards.map((card) => (
                     <JobRow key={card.localId} card={card} />
