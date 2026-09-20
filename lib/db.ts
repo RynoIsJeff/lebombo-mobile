@@ -64,8 +64,21 @@ function tx<T>(
 
 export async function allJobCards(): Promise<JobCard[]> {
   const cards = await tx<JobCard[]>(JOB_CARDS, "readonly", (s) => s.getAll())
-  // Newest first, by when the technician last touched it.
-  return cards.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+
+  // Highest job card number at the top, so the latest work is the first thing
+  // a technician sees. Numbers are compared as numbers: as text, 99 would sort
+  // above 3100.
+  //
+  // A card the office has not numbered yet has nothing to sort on, so those
+  // fall back to whenever the technician last touched them, newest first.
+  return cards.sort((a, b) => {
+    const an = a.jobCardNumber ? Number(a.jobCardNumber) : null
+    const bn = b.jobCardNumber ? Number(b.jobCardNumber) : null
+    if (an !== null && bn !== null) return bn - an
+    if (an !== null) return -1
+    if (bn !== null) return 1
+    return b.updatedAt.localeCompare(a.updatedAt)
+  })
 }
 
 export function getJobCard(localId: string): Promise<JobCard | undefined> {
