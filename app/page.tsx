@@ -82,6 +82,7 @@ export default function HomePage() {
   const { online, syncing, version, runSync } = useSync()
   const [cards, setCards] = useState<JobCard[] | null>(null)
   const [technicianName, setTechnicianName] = useState("")
+  const [revoked, setRevoked] = useState(false)
 
   const load = useCallback(async () => {
     const settings = await getSettings()
@@ -90,6 +91,7 @@ export default function HomePage() {
       return
     }
     setTechnicianName(settings.technicianName)
+    setRevoked(settings.deviceRevoked)
     setCards(await allJobCards())
   }, [router])
 
@@ -131,6 +133,22 @@ export default function HomePage() {
         </div>
         <div className="mt-2.5 h-0.5 w-16 rounded bg-sun-yellow" />
       </header>
+
+      {revoked && (
+        <div className="px-5 pb-4">
+          <Link
+            href="/setup"
+            className="flex items-start gap-2.5 rounded-xl border border-[#F0C9C4] bg-[#FDECEA] px-4 py-3 active:bg-[#FBDDD9] transition-colors"
+          >
+            <AlertTriangle className="h-4 w-4 text-[#A93226] mt-0.5 shrink-0" />
+            <span className="text-[13px] text-[#A93226]">
+              <strong className="font-semibold">This phone lost its connection to the office.</strong>{" "}
+              Nothing has been lost — every job card is still here. Tap to set the phone up
+              again and they will send themselves.
+            </span>
+          </Link>
+        </div>
+      )}
 
       {/* Sync bar — the honest answer to "did the office get it?" */}
       <div className="px-5 pb-4">

@@ -63,6 +63,7 @@ export default function SetupPage() {
         technicianName: technicianName.trim(),
         deviceLabel: deviceLabel.trim(),
         signature,
+        deviceRevoked: false,
       })
       // Pull the store list now, while there is definitely a connection.
       await refreshClients().catch(() => {})

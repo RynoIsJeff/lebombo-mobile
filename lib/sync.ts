@@ -91,6 +91,7 @@ async function sendBatch(batch: JobCard[], settings: Settings): Promise<BatchOut
   }
 
   if (response.status === 401) {
+    await saveSettings({ deviceRevoked: true })
     await revert("This phone is no longer authorised")
     return {
       sent: 0,
@@ -119,6 +120,10 @@ async function sendBatch(batch: JobCard[], settings: Settings): Promise<BatchOut
       error?: string
     }>
   }
+
+  // The office answered, so whatever it thought of these cards, this phone is
+  // connected.
+  await saveSettings({ deviceRevoked: false })
 
   let sent = 0
   let failed = 0

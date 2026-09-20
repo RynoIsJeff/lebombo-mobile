@@ -60,7 +60,7 @@ export default function MobileSettingsPage() {
   const unpair = async () => {
     if (
       !confirm(
-        "Sign this phone out? Any job card that has not been sent yet will be lost. Only do this if everything shows as Sent."
+        "Sign this phone out? Your job cards stay on this phone — you will just need the access code to connect again before they can send."
       )
     )
       return

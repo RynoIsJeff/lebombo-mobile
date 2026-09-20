@@ -98,6 +98,7 @@ const DEFAULT_SETTINGS: Settings = {
   clients: [],
   clientsFetchedAt: null,
   lastSyncAt: null,
+  deviceRevoked: false,
 }
 
 export async function getSettings(): Promise<Settings> {

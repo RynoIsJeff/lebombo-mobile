@@ -88,6 +88,12 @@ export interface Settings {
   clients: CachedClient[]
   clientsFetchedAt: string | null
   lastSyncAt: string | null
+  /**
+   * Set when the office rejects this phone's token — revoked, or the device
+   * record is gone. The work stays put; only the connection is broken, and
+   * pairing again reconnects it without touching a single job card.
+   */
+  deviceRevoked: boolean
 }
 
 export function emptyJobCard(localId: string, today: string): JobCard {

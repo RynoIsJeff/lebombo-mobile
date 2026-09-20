@@ -23,6 +23,9 @@ import { emptyJobCard, type CachedClient, type JobCard } from "@/lib/types"
 import { StorePicker } from "@/components/store-picker"
 import { useSync } from "../app-chrome"
 
+/** Check-in and check-out are recorded on the hour, never to the minute. */
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00")
+
 function Section({
   title,
   hint,
@@ -308,8 +311,10 @@ function JobForm() {
                           <label className="block text-[12px] text-steel-grey mb-1">
                             {key === "timeIn" ? "Time in" : "Time out"}
                           </label>
-                          <input
-                            type="time"
+                          {/* Whole hours only. A dropdown rather than a time
+                              input, because a phone's time picker always
+                              offers a minute dial however it is configured. */}
+                          <select
                             className="field-input"
                             value={visit[key]}
                             onChange={(e) => {
@@ -317,7 +322,20 @@ function JobForm() {
                               visits[index] = { ...visit, [key]: e.target.value }
                               update({ visits })
                             }}
-                          />
+                          >
+                            <option value="">—</option>
+                            {/* A time recorded before this was hours-only stays
+                                selectable, so opening an old card does not
+                                quietly change what was written. */}
+                            {visit[key] && !HOURS.includes(visit[key]) && (
+                              <option value={visit[key]}>{visit[key]}</option>
+                            )}
+                            {HOURS.map((h) => (
+                              <option key={h} value={h}>
+                                {h}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       ))}
                     </div>
