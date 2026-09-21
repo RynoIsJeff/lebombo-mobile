@@ -231,6 +231,7 @@ function JobForm() {
                 clientId={card.clientId}
                 storeName={card.storeName}
                 onChange={(next) => update(next)}
+                onStoresFetched={setClients}
               />
 
               <div>

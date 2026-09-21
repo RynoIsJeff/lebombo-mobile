@@ -1,8 +1,36 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Search, Check, X, ChevronDown, AlertTriangle } from "lucide-react"
+import { Search, Check, X, ChevronDown, AlertTriangle, RefreshCw } from "lucide-react"
+import { refreshClients } from "@/lib/sync"
 import type { CachedClient } from "@/lib/types"
+
+/**
+ * How well a store answers what has been typed, or null if it does not.
+ *
+ * Every word typed has to appear somewhere, in any order, so "pongola spar"
+ * finds Spar Pongola just as "spar pong" does. Where a word appears decides the
+ * ranking: the start of the name beats the start of a later word, which beats
+ * turning up in the middle, which beats only matching the client group. Thirteen
+ * stores have Pongola in the name, and the technician should not have to scroll
+ * past twelve of them.
+ */
+function scoreStore(client: CachedClient, tokens: string[]): number | null {
+  const name = client.name.toLowerCase()
+  const group = (client.groupName ?? "").toLowerCase()
+  const words = name.split(/\s+/)
+
+  let score = 0
+  for (const token of tokens) {
+    if (name === token) score += 100
+    else if (name.startsWith(token)) score += 40
+    else if (words.some((w) => w.startsWith(token))) score += 25
+    else if (name.includes(token)) score += 10
+    else if (group.includes(token)) score += 3
+    else return null // a word that appears nowhere rules the store out
+  }
+  return score
+}
 
 /**
  * Pick the store from the list the phone cached, or type one that is not on it.
@@ -17,24 +45,56 @@ export function StorePicker({
   clientId,
   storeName,
   onChange,
+  onStoresFetched,
 }: {
   clients: CachedClient[]
   clientId: string | null
   storeName: string
   onChange: (next: { clientId: string | null; storeName: string }) => void
+  /** Hands the freshly fetched list back, so the screen above can hold it. */
+  onStoresFetched?: (clients: CachedClient[]) => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+
+  /**
+   * Pull the store list from here, rather than sending someone to Settings.
+   * A technician finds out the list is missing at the moment they need it, and
+   * that is the moment to be able to fix it.
+   */
+  const fetchStores = async () => {
+    setFetching(true)
+    setFetchError(null)
+    try {
+      const fetched = await refreshClients()
+      if (!fetched) setFetchError("Could not reach the office. Type the store name instead.")
+      else if (onStoresFetched) onStoresFetched(fetched)
+    } catch {
+      setFetchError("Could not reach the office. Type the store name instead.")
+    } finally {
+      setFetching(false)
+    }
+  }
 
   const matches = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return clients.slice(0, 60)
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) return clients.slice(0, 60)
+
     return clients
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) || (c.groupName ?? "").toLowerCase().includes(q)
+      .map((client) => ({ client, score: scoreStore(client, tokens) }))
+      .filter((m): m is { client: CachedClient; score: number } => m.score !== null)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          // On a tie the shorter name wins, which is what puts "Spar Pongola"
+          // above "JJ ERLANK SHOPPING ENTERPRISES T/A PNP PONGOLA" for "pong".
+          a.client.name.length - b.client.name.length ||
+          a.client.name.localeCompare(b.client.name)
       )
       .slice(0, 60)
+      .map((m) => m.client)
   }, [clients, query])
 
   const select = (client: CachedClient) => {
@@ -124,9 +184,30 @@ export function StorePicker({
             </button>
           ))}
 
-          {matches.length === 0 && !query.trim() && (
+          {clients.length === 0 && (
+            <div className="px-5 py-8 text-center">
+              <p className="text-[13.5px] text-steel-grey">
+                No stores on this phone yet. Fetch the list where there is signal, or
+                just type the store name.
+              </p>
+              <button
+                type="button"
+                onClick={fetchStores}
+                disabled={fetching}
+                className="btn-secondary h-11 mt-4"
+              >
+                <RefreshCw className={`h-4 w-4 ${fetching ? "animate-spin" : ""}`} />
+                {fetching ? "Fetching…" : "Fetch store list"}
+              </button>
+              {fetchError && (
+                <p className="mt-2.5 text-[12.5px] text-[#A93226]">{fetchError}</p>
+              )}
+            </div>
+          )}
+
+          {clients.length > 0 && matches.length === 0 && query.trim() && (
             <p className="px-5 py-8 text-center text-[13.5px] text-steel-grey">
-              No stores cached yet. Sync where there is signal, or type the name.
+              No store matches that. Use what you typed, above.
             </p>
           )}
         </div>
